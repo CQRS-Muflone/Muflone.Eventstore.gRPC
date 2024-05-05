@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34728.123
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Muflone.Eventstore.gRPC", "Muflone.Eventstore.gRPC\Muflone.Eventstore.gRPC.csproj", "{2A9CE6BB-71BA-45F5-8A20-CCE4929B0E98}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2A9CE6BB-71BA-45F5-8A20-CCE4929B0E98}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A9CE6BB-71BA-45F5-8A20-CCE4929B0E98}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A9CE6BB-71BA-45F5-8A20-CCE4929B0E98}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A9CE6BB-71BA-45F5-8A20-CCE4929B0E98}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {64BB81CC-8556-40BB-9055-9DBC5FAF338D}
+	EndGlobalSection
+EndGlobal
