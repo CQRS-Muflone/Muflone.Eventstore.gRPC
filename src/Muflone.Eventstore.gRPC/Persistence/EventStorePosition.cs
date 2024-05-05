@@ -2,20 +2,20 @@
 {
     public interface IEventStorePosition
     {
-        long CommitPosition { get; }
-        long PreparePosition { get; }
+        ulong CommitPosition { get; }
+        ulong PreparePosition { get; }
     }
 
 
     public class EventStorePosition : IEventStorePosition
     {
-        public EventStorePosition(long commitPosition, long preparePosition)
+        public EventStorePosition(ulong commitPosition, ulong preparePosition)
         {
             CommitPosition = commitPosition;
             PreparePosition = preparePosition;
         }
 
-        public long CommitPosition { get; }
-        public long PreparePosition { get; }
+        public ulong CommitPosition { get; }
+        public ulong PreparePosition { get; }
     }
 }

@@ -7,9 +7,10 @@ using Newtonsoft.Json.Serialization;
 using System.Reflection;
 using System.Text;
 
-//TODO: Move from newtonsoft,json to system.text.json
-//TODO: Update Muflone IRepository to implement CancellationToken
-//TODO: Update Muflone IRepository to implement long instead of int for version
+//TODO: Move from newtonsoft.json to system.text.json
+//TODO: Update Muflone IRepository GetByIdAsync() to implement CancellationToken
+//TODO: Update Muflone IRepository GetByIdAsync() to implement long instead of int for version field
+//TODO: Update Muflone IRepository SaveAsync() to implement CancellationToken
 
 namespace Muflone.Eventstore.gRPC.Persistence
 {
@@ -19,9 +20,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
         private const string AggregateClrTypeHeader = "AggregateClrTypeName";
         private const string CommitIdHeader = "CommitId";
         private const string CommitDateHeader = "CommitDate";
-        private const int WritePageSize = 500;
-        private const int ReadPageSize = 500;
-
+        
         private readonly Func<Type, Guid, string> aggregateIdToStreamName;
 
         private readonly EventStoreClient eventStoreClient;
@@ -89,7 +88,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
             return JsonConvert.DeserializeObject(Encoding.UTF8.GetString(resolvedEvent.Event.Data.ToArray()), Type.GetType(((string)eventClrTypeName)!)!)!;
         }
 
-        public async Task SaveAsync(IAggregate aggregate, Guid commitId, Action<IDictionary<string, object>> updateHeaders)
+        public async Task SaveAsync(IAggregate aggregate, Guid commitId, Action<IDictionary<string, object>> updateHeaders/*, CancellationToken cancellationToken = default*/)
         {
             var commitHeaders = new Dictionary<string, object>
               {
@@ -100,44 +99,29 @@ namespace Muflone.Eventstore.gRPC.Persistence
             updateHeaders(commitHeaders);
 
             var streamName = aggregateIdToStreamName(aggregate.GetType(), aggregate.Id.Value);
-            var newEvents = aggregate.GetUncommittedEvents().Cast<object>().ToList();
-            var originalVersion = aggregate.Version - newEvents.Count;
-            var expectedVersion = originalVersion == 0 ? ExpectedVersion.NoStream : originalVersion - 1;
-            var eventsToSave = newEvents.Select(e => ToEventData(Guid.NewGuid(), e, commitHeaders)).ToList();
+            var newEvents = aggregate.GetUncommittedEvents().Cast<object>().ToList();            
+            var eventsToSave = newEvents.Select(e => ToEventData(Uuid.NewUuid(), e, commitHeaders)).ToList();
 
-            if (eventsToSave.Count < WritePageSize)
-            {
-                eventStoreClient.AppendToStreamAsync(streamName, expectedVersion, eventsToSave).Wait();
-            }
-            else
-            {
-                var transaction = eventStoreClient.StartTransactionAsync(streamName, expectedVersion).Result;
+            //var originalVersion = aggregate.Version - newEvents.Count;
+            //var expectedVersion = originalVersion == 0 ? ExpectedVersion.NoStream : originalVersion - 1;
 
-                var position = 0;
-                while (position < eventsToSave.Count)
-                {
-                    var pageEvents = eventsToSave.Skip(position).Take(WritePageSize);
-                    await transaction.WriteAsync(pageEvents);
-                    position += WritePageSize;
-                }
-                await transaction.CommitAsync();
-                transaction.Dispose();
-            }
+            await eventStoreClient.AppendToStreamAsync(streamName, StreamState.Any, eventsToSave/*, cancellationToken: cancellationToken*/);
+
             aggregate.ClearUncommittedEvents();
         }
 
-        public async Task SaveAsync(IAggregate aggregate, Guid commitId)
+        public async Task SaveAsync(IAggregate aggregate, Guid commitId/*, CancellationToken cancellationToken = default*/)
         {
-            await SaveAsync(aggregate, commitId, h => { });
+            await SaveAsync(aggregate, commitId, headers => { }/*, cancellationToken */);
         }
 
-        private static EventData ToEventData(Guid eventId, object @event, IDictionary<string, object> headers)
+        private static EventData ToEventData(Uuid eventId, object @event, IDictionary<string, object> headers)
         {
             var data = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(@event, SerializerSettings));
             var eventHeaders = new Dictionary<string, object>(headers) { { EventClrTypeHeader, @event.GetType().AssemblyQualifiedName! } };
             var metadata = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(eventHeaders, SerializerSettings));
             var typeName = @event.GetType().Name;
-            return new EventData(eventId, typeName, true, data, metadata);
+            return new EventData(eventId, typeName, data, metadata);
         }
 
         #region IDisposable Support

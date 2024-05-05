@@ -1,11 +1,11 @@
-﻿using System.Collections.Concurrent;
-using System.Text;
-using EventStore.Client;
+﻿using EventStore.Client;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Muflone.Messages.Events;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Collections.Concurrent;
+using System.Text;
 
 namespace Muflone.Eventstore.gRPC.Persistence
 {
@@ -24,7 +24,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
         private readonly ManualResetEventSlim liveDone = new(true);
         private readonly ConcurrentQueue<ResolvedEvent> liveQueue = new();
         private readonly ILogger log;
-        private EventStoreSubscription eventStoreSubscription = null!;
+        //private EventStoreSubscription eventStoreSubscription = null!;
         private int isPublishing;
         private Position lastProcessed;
         private volatile bool livePublishingAllowed;
@@ -55,11 +55,11 @@ namespace Muflone.Eventstore.gRPC.Persistence
         // Credit algorithm to Szymon Pobiega
         // http://simon-says-architecture.com/2013/02/02/mechanics-of-durable-subscription/#comments
         // 1. The subscriber always starts with pull assuming there were some messages generated while it was offline
-        // 2. The subscriber pulls messages until thereâ€™s nothing left to pull (it is up to date with the stream)
-        // 3. Push subscription is started  but arriving messages are not processed immediately but temporarily redirected to a buffer
+        // 2. The subscriber pulls messages until there's nothing left to pull (it is up to date with the stream)
+        // 3. Push subscription is started but arriving messages are not processed immediately but temporarily redirected to a buffer
         // 4. One last pull is done to ensure nothing happened between step 2 and 3
         // 5. Messages from this last pull are processed
-        // 6. Processing messages from push buffer is started. While messages are processed, they are checked against IDs of messages processed in step 5 to ensure thereâ€™s no duplicates.
+        // 6. Processing messages from push buffer is started. While messages are processed, they are checked against IDs of messages processed in step 5 to ensure there's no duplicates.
         // 7. System works in push model until subscriber is killed or subscription is dropped by publisher drops push subscription.
 
         //Credit to Andrii Nakryiko
@@ -78,9 +78,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
             livePublishingAllowed = false;
             liveDone.Wait(); // wait until all live processing is finished (queue is empty, _lastProcessed updated)
 
-            //AN: if _lastProcessed == (-1, -1) then we haven't processed anything yet, so we start from Position.Start
-            var startPos = lastProcessed == new Position(-1, -1) ? Position.Start : lastProcessed;
-            var nextPos = await ReadHistoricalEventsFrom(startPos);
+            var nextPos = await ReadHistoricalEventsFrom(lastProcessed);
 
             eventStoreSubscription = await SubscribeToAll();
 
@@ -98,33 +96,36 @@ namespace Muflone.Eventstore.gRPC.Persistence
 
             // hopefully additional check in PublishEvents (additional check for _stop after setting event) prevents race conditions
             if (!historicalDone.Wait(ThreadKillTimeoutMillisec))
-                throw new TimeoutException("DispatchStoppingException");
+                throw new TimeoutException("EventDispatchStoppingException");
 
             if (!liveDone.Wait(ThreadKillTimeoutMillisec))
-                throw new TimeoutException("DispatchStoppingException");
+                throw new TimeoutException("EventDispatchStoppingException");
             return Task.CompletedTask;
         }
 
-        private async Task<Position> ReadHistoricalEventsFrom(Position from)
+        private async Task<Position> ReadHistoricalEventsFrom(Position from, CancellationToken cancellationToken = default)
         {
-            var position = from;
-            AllEventsSlice slice;
-            while (!stop && (slice = await eventStoreClient.ReadAllEventsForwardAsync(position, ReadPageSize, false)).Events.Length > 0)
+            Position? position = from;
+            while (!stop)
             {
-                foreach (var rawEvent in slice.Events) historicalQueue.Enqueue(rawEvent);
+                var readResult = eventStoreClient.ReadAllAsync(Direction.Forwards, position.HasValue ? position.Value : Position.Start, cancellationToken: cancellationToken);
+                if (await readResult.CountAsync(cancellationToken) == 0)
+                    break;
+                await readResult.ForEachAsync(@event => historicalQueue.Enqueue(@event), cancellationToken);
+                //await foreach (var rawEvent in readResult) 
+                //    historicalQueue.Enqueue(rawEvent);
                 EnsurePublishEvents(historicalQueue, historicalDone);
 
-                position = slice.NextPosition;
+                position = readResult.LastPosition;
             }
 
-            return position;
+            return position ?? Position.Start;
         }
 
         private Task<EventStoreSubscription> SubscribeToAll()
         {
             //TODO: Before trying to resubscribe - how to ensure that store is active and ready to accept.
-            //AN: eventStoreClient automatically tries to connect (if not already connected) to EventStore,
-            //so you don't have to do something manually
+            //AN: eventStoreClient automatically tries to connect (if not already connected) to EventStore, so you don't have to do something manually
             //Though in case of errors, you need to do some actions (if EventStore server is down or not yet up, etc)
             var task = eventStoreClient.SubscribeToAllAsync(false, EventAppeared, SubscriptionDropped);
             if (!task.Wait(ReconnectTimeoutMillisec))
