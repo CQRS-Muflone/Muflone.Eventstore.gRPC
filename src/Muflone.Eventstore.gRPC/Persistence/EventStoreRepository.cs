@@ -67,9 +67,8 @@ namespace Muflone.Eventstore.gRPC.Persistence
             if (await readResult.ReadState != ReadState.Ok)
                 throw new AggregateNotFoundException(id, typeof(TAggregate));
 
-            await readResult.Select(DeserializeEvent).ForEachAsync(@event => aggregate!.ApplyEvent(@event)/*, cancellationToken*/);
-            //await foreach (var @event in readResult)
-            //    aggregate!.ApplyEvent(DeserializeEvent(@event));
+            await foreach (var @event in readResult)
+                aggregate!.ApplyEvent(DeserializeEvent(@event));
 
             if (aggregate!.Version != version && version < int.MaxValue)
                 throw new AggregateVersionException(id, typeof(TAggregate), aggregate.Version, version);

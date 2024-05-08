@@ -24,7 +24,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
         private readonly ManualResetEventSlim liveDone = new(true);
         private readonly ConcurrentQueue<ResolvedEvent> liveQueue = new();
         private readonly ILogger log;
-        //private EventStoreSubscription eventStoreSubscription = null!;
+        private EventStoreSubscription eventStoreSubscription = null!;
         private int isPublishing;
         private Position lastProcessed;
         private volatile bool livePublishingAllowed;
@@ -130,7 +130,9 @@ namespace Muflone.Eventstore.gRPC.Persistence
             var task = eventStoreClient.SubscribeToAllAsync(false, EventAppeared, SubscriptionDropped);
             if (!task.Wait(ReconnectTimeoutMillisec))
                 throw new TimeoutException("ReconnectedAfterSubscriptionException");
-            return Task.FromResult(task.GetAwaiter().GetResult());
+            
+            //return Task.FromResult(task.GetAwaiter().GetResult());
+            return task;
 
             //return await eventStoreClient.SubscribeToAllAsync(false, EventAppeared, SubscriptionDropped);
         }
