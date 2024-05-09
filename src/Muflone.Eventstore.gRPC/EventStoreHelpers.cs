@@ -11,7 +11,7 @@ namespace Muflone.Eventstore.gRPC
         public static IServiceCollection AddMufloneEventStore(this IServiceCollection services, string evenStoreConnectionString)
         {
             services.AddSingleton(provider =>
-            {                
+            {
                 var settings = EventStoreClientSettings.Create(evenStoreConnectionString);
                 return new EventStoreClient(settings);
             });

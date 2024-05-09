@@ -20,7 +20,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
         private const string AggregateClrTypeHeader = "AggregateClrTypeName";
         private const string CommitIdHeader = "CommitId";
         private const string CommitDateHeader = "CommitDate";
-        
+
         private readonly Func<Type, Guid, string> aggregateIdToStreamName;
 
         private readonly EventStoreClient eventStoreClient;
@@ -49,9 +49,9 @@ namespace Muflone.Eventstore.gRPC.Persistence
             this.aggregateIdToStreamName = aggregateIdToStreamName;
         }
 
-        public async Task<TAggregate?> GetByIdAsync<TAggregate>(Guid id/*, CancellationToken cancellationToken = default*/) where TAggregate : class, IAggregate
+        public Task<TAggregate?> GetByIdAsync<TAggregate>(Guid id/*, CancellationToken cancellationToken = default*/) where TAggregate : class, IAggregate
         {
-            return await GetByIdAsync<TAggregate>(id, int.MaxValue /*, cancellationToken*/);
+            return GetByIdAsync<TAggregate>(id, int.MaxValue /*, cancellationToken*/);
         }
 
         public async Task<TAggregate?> GetByIdAsync<TAggregate>(Guid id, int version/*, CancellationToken cancellationToken = default*/) where TAggregate : class, IAggregate
@@ -98,7 +98,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
             updateHeaders(commitHeaders);
 
             var streamName = aggregateIdToStreamName(aggregate.GetType(), aggregate.Id.Value);
-            var newEvents = aggregate.GetUncommittedEvents().Cast<object>().ToList();            
+            var newEvents = aggregate.GetUncommittedEvents().Cast<object>().ToList();
             var eventsToSave = newEvents.Select(e => ToEventData(Uuid.NewUuid(), e, commitHeaders)).ToList();
 
             //var originalVersion = aggregate.Version - newEvents.Count;
