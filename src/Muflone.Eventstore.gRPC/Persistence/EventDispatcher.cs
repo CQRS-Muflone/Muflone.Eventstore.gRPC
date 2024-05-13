@@ -4,22 +4,16 @@ using Microsoft.Extensions.Logging;
 using Muflone.Messages.Events;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Collections.Concurrent;
 using System.Text;
 
 namespace Muflone.Eventstore.gRPC.Persistence
 {
 	public class EventDispatcher : IHostedService
 	{
-		private const int ThreadKillTimeoutMillisec = 5000;
-
 		private readonly IEventBus eventBus;
 		private readonly EventStoreClient eventStoreClient;
 		private readonly IEventStorePositionRepository eventStorePositionRepository;
-		private readonly ManualResetEventSlim liveDone = new(true);
-		private readonly ConcurrentQueue<ResolvedEvent> liveQueue = new();
 		private readonly ILogger log;
-		private int isPublishing;
 		private Position lastProcessed;
 		private volatile bool stop;
 
@@ -51,9 +45,6 @@ namespace Muflone.Eventstore.gRPC.Persistence
 
 			stop = true;
 
-			if (!liveDone.Wait(ThreadKillTimeoutMillisec))
-				throw new TimeoutException("EventDispatchStoppingException");
-
 			log.LogInformation("EventDispatcher stopped");
 
 			return Task.CompletedTask;
@@ -61,7 +52,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
 
 		private async Task SubscribeToAllAsync(Position from, CancellationToken cancellationToken)
 		{
-			Subscription:
+		Subscription:
 			try
 			{
 				await using var subscription = eventStoreClient.SubscribeToAll(FromAll.After(from), cancellationToken: cancellationToken);
@@ -72,8 +63,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
 					if (message is StreamMessage.Event(var evnt))
 					{
 						log.LogDebug($"Received event {evnt.OriginalEventNumber}@{evnt.OriginalStreamId}");
-						liveQueue.Enqueue(evnt);
-						EnsurePublishEvents(liveQueue, liveDone);
+						await PublishEvent(evnt);
 					}
 				}
 			}
@@ -92,51 +82,21 @@ namespace Muflone.Eventstore.gRPC.Persistence
 			}
 		}
 
-		private void EnsurePublishEvents(ConcurrentQueue<ResolvedEvent> queue, ManualResetEventSlim doneEvent)
+		private async Task PublishEvent(ResolvedEvent resolvedEvent)
 		{
-			if (stop)
+			if (!(resolvedEvent.OriginalPosition > lastProcessed))
 				return;
 
-			if (Interlocked.CompareExchange(ref isPublishing, 1, 0) == 0)
-				ThreadPool.QueueUserWorkItem(_ => PublishEvents(queue, doneEvent));
-		}
-
-		private void PublishEvents(ConcurrentQueue<ResolvedEvent> queue, ManualResetEventSlim doneEvent)
-		{
-			var keepGoing = true;
-			while (keepGoing)
+			var processedEvent = ProcessRawEvent(resolvedEvent);
+			if (processedEvent != null)
 			{
-				doneEvent.Reset();
-				if (stop)
-				{
-					doneEvent.Set();
-					Interlocked.CompareExchange(ref isPublishing, 0, 1);
-					return;
-				}
-
-				while (!stop && queue.TryDequeue(out var @event))
-				{
-					if (!(@event.OriginalPosition > lastProcessed))
-						continue;
-
-					var processedEvent = ProcessRawEvent(@event);
-					if (processedEvent != null)
-					{
-						processedEvent.Headers.Set(Constants.CommitPosition, @event.OriginalPosition.Value.CommitPosition.ToString());
-						processedEvent.Headers.Set(Constants.PreparePosition, @event.OriginalPosition.Value.PreparePosition.ToString());
-						eventBus.PublishAsync(processedEvent);
-					}
-
-					lastProcessed = @event.OriginalPosition.Value;
-					//TODO: Should be moved inside the event handlers to be sure that only when events are persisted the counter will be updated?
-					eventStorePositionRepository.Save(new EventStorePosition(lastProcessed.CommitPosition, lastProcessed.PreparePosition));
-				}
-
-				doneEvent.Set(); // signal end of processing particular queue
-				Interlocked.CompareExchange(ref isPublishing, 0, 1);
-				// try to reacquire lock if needed
-				keepGoing = !stop && queue.Count > 0 && Interlocked.CompareExchange(ref isPublishing, 1, 0) == 0;
+				processedEvent.Headers.Set(Constants.CommitPosition, resolvedEvent.OriginalPosition.Value.CommitPosition.ToString());
+				processedEvent.Headers.Set(Constants.PreparePosition, resolvedEvent.OriginalPosition.Value.PreparePosition.ToString());
+				await eventBus.PublishAsync(processedEvent);
 			}
+
+			lastProcessed = resolvedEvent.OriginalPosition.Value;
+			await eventStorePositionRepository.Save(new EventStorePosition(lastProcessed.CommitPosition, lastProcessed.PreparePosition));
 		}
 
 		private DomainEvent? ProcessRawEvent(ResolvedEvent rawEvent)
