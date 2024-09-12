@@ -18,7 +18,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
 		private const string CommitIdHeader = "CommitId";
 		private const string CommitDateHeader = "CommitDate";
 
-		private readonly Func<Type, Guid, string> aggregateIdToStreamName;
+		private readonly Func<Type, IDomainId, string> aggregateIdToStreamName;
 
 		private readonly EventStoreClient eventStoreClient;
 		private static readonly JsonSerializerSettings SerializerSettings;
@@ -35,23 +35,23 @@ namespace Muflone.Eventstore.gRPC.Persistence
 		//This rename is needed to be consistent with naming convention of EventStore javascript
 		public EventStoreRepository(EventStoreClient eventStoreClient)
 			//: this(eventStoreClient, (type, aggregateId) => $"{char.ToLower(type.Name[0]) + type.Name.Substring(1)}-{aggregateId}")
-			: this(eventStoreClient, (type, aggregateId) => $"{char.ToLower(type.Name[0]) + type.Name[1..]}-{aggregateId}")
+			: this(eventStoreClient, (type, aggregateId) => $"{char.ToLower(type.Name[0]) + type.Name[1..]}-{aggregateId.Value}")
 		{
 
 		}
 
-		public EventStoreRepository(EventStoreClient eventStoreClient, Func<Type, Guid, string> aggregateIdToStreamName)
+		public EventStoreRepository(EventStoreClient eventStoreClient, Func<Type, IDomainId, string> aggregateIdToStreamName)
 		{
 			this.eventStoreClient = eventStoreClient;
 			this.aggregateIdToStreamName = aggregateIdToStreamName;
 		}
 
-		public Task<TAggregate?> GetByIdAsync<TAggregate>(Guid id, CancellationToken cancellationToken = default) where TAggregate : class, IAggregate
+		public Task<TAggregate?> GetByIdAsync<TAggregate>(IDomainId id, CancellationToken cancellationToken = default) where TAggregate : class, IAggregate
 		{
 			return GetByIdAsync<TAggregate>(id, int.MaxValue, cancellationToken);
 		}
 
-		public async Task<TAggregate?> GetByIdAsync<TAggregate>(Guid id, long version, CancellationToken cancellationToken = default) where TAggregate : class, IAggregate
+		public async Task<TAggregate?> GetByIdAsync<TAggregate>(IDomainId id, long version, CancellationToken cancellationToken = default) where TAggregate : class, IAggregate
 		{
 			if (version <= 0)
 				throw new InvalidOperationException("Cannot get version <= 0");
@@ -94,7 +94,7 @@ namespace Muflone.Eventstore.gRPC.Persistence
 							};
 			updateHeaders(commitHeaders);
 
-			var streamName = aggregateIdToStreamName(aggregate.GetType(), aggregate.Id.Value);
+			var streamName = aggregateIdToStreamName(aggregate.GetType(), aggregate.Id);
 			var newEvents = aggregate.GetUncommittedEvents().Cast<object>().ToList();
 			var eventsToSave = newEvents.Select(e => ToEventData(Uuid.NewUuid(), e, commitHeaders)).ToList();
 
