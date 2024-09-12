@@ -35,7 +35,9 @@ namespace Muflone.Eventstore.gRPC.Persistence
 			lastProcessed = (position != null) ? new Position(position.CommitPosition, position.PreparePosition) : Position.Start;
 
 			//No await or it will never give back control and the app won't start
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
 			SubscribeToAllAsync(lastProcessed, cancellationToken);
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
 		}
 
 		public Task StopAsync(CancellationToken cancellationToken)
