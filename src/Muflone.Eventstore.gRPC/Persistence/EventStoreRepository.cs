@@ -18,9 +18,9 @@ public class EventStoreRepository : IRepository
 	private const string CommitIdHeader = "CommitId";
 	private const string CommitDateHeader = "CommitDate";
 
-	private readonly Func<Type, IDomainId, string> aggregateIdToStreamName;
+	private readonly Func<Type, IDomainId, string> _aggregateIdToStreamName;
 
-	private readonly EventStoreClient eventStoreClient;
+	private readonly EventStoreClient _eventStoreClient;
 	private static readonly JsonSerializerSettings SerializerSettings;
 
 	static EventStoreRepository()
@@ -42,8 +42,8 @@ public class EventStoreRepository : IRepository
 
 	public EventStoreRepository(EventStoreClient eventStoreClient, Func<Type, IDomainId, string> aggregateIdToStreamName)
 	{
-		this.eventStoreClient = eventStoreClient;
-		this.aggregateIdToStreamName = aggregateIdToStreamName;
+		this._eventStoreClient = eventStoreClient;
+		this._aggregateIdToStreamName = aggregateIdToStreamName;
 	}
 
 	public Task<TAggregate?> GetByIdAsync<TAggregate>(IDomainId id, CancellationToken cancellationToken = default) where TAggregate : class, IAggregate
@@ -56,24 +56,24 @@ public class EventStoreRepository : IRepository
 		if (version <= 0)
 			throw new InvalidOperationException("Cannot get version <= 0");
 
-		var streamName = aggregateIdToStreamName(typeof(TAggregate), id);
+		var streamName = _aggregateIdToStreamName(typeof(TAggregate), id);
 		var aggregate = ConstructAggregate<TAggregate>();
 
-		var readResult = eventStoreClient.ReadStreamAsync(Direction.Forwards, streamName, StreamPosition.Start, maxCount: version, cancellationToken: cancellationToken);
+		var readResult = _eventStoreClient.ReadStreamAsync(Direction.Forwards, streamName, StreamPosition.Start, maxCount: version, cancellationToken: cancellationToken);
 
 		if (await readResult.ReadState != ReadState.Ok)
 			throw new AggregateNotFoundException(id, typeof(TAggregate));
 
 		await foreach (var @event in readResult)
-			aggregate!.ApplyEvent(DeserializeEvent(@event));
+			aggregate.ApplyEvent(DeserializeEvent(@event));
 
-		if (aggregate!.Version != version && version < int.MaxValue)
+		if (aggregate.Version != version && version < int.MaxValue)
 			throw new AggregateVersionException(id, typeof(TAggregate), aggregate.Version, version);
 
 		return aggregate;
 	}
 
-	private static TAggregate? ConstructAggregate<TAggregate>()
+	private static TAggregate ConstructAggregate<TAggregate>()
 	{
 		return (TAggregate)Activator.CreateInstance(typeof(TAggregate), true)!;
 	}
@@ -94,21 +94,21 @@ public class EventStoreRepository : IRepository
 		};
 		updateHeaders(commitHeaders);
 
-		var streamName = aggregateIdToStreamName(aggregate.GetType(), aggregate.Id);
+		var streamName = _aggregateIdToStreamName(aggregate.GetType(), aggregate.Id);
 		var newEvents = aggregate.GetUncommittedEvents().Cast<object>().ToList();
 		var eventsToSave = newEvents.Select(e => ToEventData(Uuid.NewUuid(), e, commitHeaders)).ToList();
 
 		//var originalVersion = aggregate.Version - newEvents.Count;
 		//var expectedVersion = originalVersion == 0 ? ExpectedVersion.NoStream : originalVersion - 1;
 
-		await eventStoreClient.AppendToStreamAsync(streamName, StreamState.Any, eventsToSave, cancellationToken: cancellationToken);
+		await _eventStoreClient.AppendToStreamAsync(streamName, StreamState.Any, eventsToSave, cancellationToken: cancellationToken);
 
 		aggregate.ClearUncommittedEvents();
 	}
 
 	public async Task SaveAsync(IAggregate aggregate, Guid commitId, CancellationToken cancellationToken = default)
 	{
-		await SaveAsync(aggregate, commitId, headers => { }, cancellationToken);
+		await SaveAsync(aggregate, commitId, _ => { }, cancellationToken);
 	}
 
 	private static EventData ToEventData(Uuid eventId, object @event, IDictionary<string, object> headers)
