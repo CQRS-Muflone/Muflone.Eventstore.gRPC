@@ -3,8 +3,6 @@ using Muflone.Core;
 using Muflone.Persistence;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
-using System.Reflection;
 using System.Text;
 
 //TODO: Move from newtonsoft.json to system.text.json
@@ -21,16 +19,15 @@ public class EventStoreRepository : IRepository
 	private readonly Func<Type, IDomainId, string> _aggregateIdToStreamName;
 
 	private readonly EventStoreClient _eventStoreClient;
-	private static readonly JsonSerializerSettings SerializerSettings;
 
-	static EventStoreRepository()
+	// Events are written with the same contract they are read with: DeserializeEvent and the
+	// EventDispatcher use Newtonsoft's defaults, which only see public members. Writing non-public
+	// members and compiler backing fields as well stored every nested value twice (plus each record's
+	// EqualityContract) - ~20-45x the payload - and none of it was ever read back.
+	private static readonly JsonSerializerSettings SerializerSettings = new()
 	{
-		SerializerSettings = new JsonSerializerSettings
-		{
-			TypeNameHandling = TypeNameHandling.None,
-			ContractResolver = new PrivateContractResolver()
-		};
-	}
+		TypeNameHandling = TypeNameHandling.None
+	};
 
 	//This rename is needed to be consistent with naming convention of EventStore javascript
 	public EventStoreRepository(EventStoreClient eventStoreClient)
@@ -111,7 +108,7 @@ public class EventStoreRepository : IRepository
 		await SaveAsync(aggregate, commitId, _ => { }, cancellationToken);
 	}
 
-	private static EventData ToEventData(Uuid eventId, object @event, IDictionary<string, object> headers)
+	internal static EventData ToEventData(Uuid eventId, object @event, IDictionary<string, object> headers)
 	{
 		var data = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(@event, SerializerSettings));
 		var eventHeaders = new Dictionary<string, object>(headers) { { EventClrTypeHeader, @event.GetType().AssemblyQualifiedName! } };
@@ -151,18 +148,4 @@ public class EventStoreRepository : IRepository
 		// GC.SuppressFinalize(this);
 	}
 	#endregion
-}
-
-internal class PrivateContractResolver : DefaultContractResolver
-{
-	protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
-	{
-		var props = type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-			.Select(p => base.CreateProperty(p, memberSerialization))
-			.Union(type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-				.Select(f => base.CreateProperty(f, memberSerialization)))
-			.ToList();
-		props.ForEach(p => { p.Writable = true; p.Readable = true; });
-		return props;
-	}
 }
