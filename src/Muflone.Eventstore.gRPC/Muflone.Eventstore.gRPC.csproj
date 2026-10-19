@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Version>10.0.1</Version>
+    <Version>10.0.2</Version>
     <Authors>Alessandro Colla, Alberto Acerbis</Authors>
     <Description>EventstoreDB gRPC implementation for Muflone</Description>
     <PackageProjectUrl>https://github.com/CQRS-Muflone/Muflone.Eventstore.gRPC</PackageProjectUrl>
@@ -15,7 +15,7 @@
     <PackageTags>CQRS; EventStoreDB; Muflone</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-    <PackageReleaseNotes>Use the new IDomainId</PackageReleaseNotes>
+    <PackageReleaseNotes>Events are written with only the members they are read with: no compiler backing fields or non-public members, ~20-45x smaller payloads. Existing events read unchanged.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +27,10 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Muflone.Eventstore.gRPC.Tests" />
   </ItemGroup>
 
   <ItemGroup>
