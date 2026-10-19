@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Version>10.0.2</Version>
+    <Version>10.0.3-alpha</Version>
     <Authors>Alessandro Colla, Alberto Acerbis</Authors>
     <Description>EventstoreDB gRPC implementation for Muflone</Description>
     <PackageProjectUrl>https://github.com/CQRS-Muflone/Muflone.Eventstore.gRPC</PackageProjectUrl>
